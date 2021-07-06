@@ -1,0 +1,177 @@
+#  2 TP
+#Script
+
+#   El presente documento utiliza la Teoría Actuarial de los Seguros Personales 
+#   para la construcción de un cotizador que calcule las principales coberturas 
+#   de los seguros para las personas 
+
+
+#    Referencias
+
+#     x: edad
+#     h; diferimiento desde la subscripción hasta el inicio de la vigencia de la cobertura (por defecto 0)
+#     n: plazo
+#     r: razón distinta del capital inicial o final (progresión aritmética)
+#     i: tasa técnica (por defecto 0,04)
+#     genero: 0 --> Femenino (default)
+#             1 --> Masculino
+
+getwd()
+dir()
+path = "C:/Users/gonza/Desktop/Computación científica actuarial/2021/Trabajos/Segundo trabajo"
+setwd(path)
+#El paquete readxl forma parte del paquete tidyverse
+
+install.packages("readxl")
+library(readxl)  
+tabla<-read_xlsx("input.xlsx")
+
+edit(tabla)
+
+PPU <- function(x,h=0,n,r=1,i=0.04,genero=0){
+
+  if(genero==0) {tabla$`q(x)`=tabla$`F_q(x)`} else {tabla$`q(x)`=tabla$`M_q(x)`}
+  tabla$`p(x)`<-1-tabla$`q(x)`
+  if(r==1) {1} else {r}
+  
+  tabla$`l(x)`<-tabla$`q(x)`
+  tabla$`d(x)`<-tabla$`q(x)`
+  l0=10000000
+  tabla[1,'l(x)']<-l0  
+  
+for (j in 1:100){
+    tabla[j,'d(x)']<- tabla[j,'l(x)']*tabla[j,'q(x)']
+    tabla[j+1,'l(x)']<- tabla[j,'l(x)']-tabla[j,'d(x)']}
+  tabla=tabla[-101,]
+  
+  #Construyo las columnas correspondiente a vida:
+
+  #D(x)
+  
+  tabla$`D(x)`<-((1+i)^(-tabla$x))*tabla$`l(x)`
+  
+  #N(x)  
+  
+  a<-tabla$`D(x)`
+  b<-c()
+  for (j in 1:100) {
+    SumatoriaD<-sum(a[j:100])
+    b<-c(b,SumatoriaD)}
+  tabla$`N(x)`<- b
+  
+  #S(x)  
+  a<-tabla$`N(x)`
+  b<-c()
+  for (j in 1:100) {
+    SumatoriaN<-sum(a[j:100])
+    b<-c(b,SumatoriaN)}
+  tabla$`S(x)`<-b
+  
+  #Construyo las columnas correspondiente a muerte
+  
+  #C(x)
+  tabla$`C(x)`<-(tabla$`d(x)`*(1/(1+i))^(tabla$x+1))
+  
+  #M(x)  
+  a<-tabla$`C(x)`
+  b<-c()
+  for (j in 1:100) {
+    SumatoriaC<-sum(a[j:100])
+    b<-c(b,SumatoriaC)}
+  tabla$`M(x)`<-b
+  
+  #R(x)
+  a<-tabla$`M(x)`
+  b<-c()
+  for (j in 1:100) {
+    SumatoriaM<-sum(a[j:100])
+    b<-c(b,SumatoriaM)}
+  tabla$`R(x)`<-b
+  
+  #Cálculo de coberturas:
+  
+  #Capital diferido de vida  
+  Dx<-tabla$`D(x)`[x+1]
+  Dxn<-tabla$`D(x)`[x+1+n]
+  Ex<-Dxn/Dx
+  
+  #Seguro de Vida de Capitales Múltiples
+  Nxh<-tabla$`N(x)`[x+1+h]
+  Nxhn<-tabla$`N(x)`[x+1+h+n]
+  axhn<-(Nxh-Nxhn)/Dx
+  
+  #Valuación un número determinado h de años después del último pago probable
+  Nx<-tabla$`N(x)`[x+1]
+  Nxn<-tabla$`N(x)`[x+1+n]
+  Dxhn.<-tabla$`D(x)`[x+h+n]
+  Sxhn.<-((Nx-Nxn)/(Dxhn.))
+  
+  #Seguro pagadero en caso de Muerte
+  Mxh<-tabla$`M(x)`[x+1+h]
+  Mxhn<-tabla$`M(x)`[x+1+h+n]
+  Axhn<-(Mxh-Mxhn)/Dx
+  
+  ##Planes mixtos
+  #Plan Dotal:  P(x;1)=A(x;0;n)+E(x;n)
+  Mx.<-tabla$`M(x)`[x+1]
+  Mxn.<-tabla$`M(x)`[x+1+n]
+  Axn.<-(Mx.-Mxn.)/Dx
+  Dotal<- (Axn.+Ex)
+  
+  #Plan Dotal Doble (Dotalina): P(x;1)=A(x;0;100-x)+E(x;n)
+  Mx..<-tabla$`M(x)`[x+1]
+  Axw..<-Mx../Dx
+  Dotalina<- (Axw..+Ex)
+  
+  #Término fijo: P(x;1)=v^n
+  TF<- (1+i)^(-n)
+  
+  #Seguro de Vida de Capitales Múltiples Crecientes a razón del Capital Inicial
+  Sxh<-tabla$`S(x)`[x+1+h]
+  Sxhn<-tabla$`S(x)`[x+1+h+n]
+  aIxhn<-((Sxh-Sxhn)-n*Nxhn)/Dx
+  
+  #Seguro de pagadero en caso de Muerte Creciente a razón del Capital Inicial
+  Rxh <- tabla$`R(x)`[x+1+h]
+  Rxhn <- tabla$`R(x)`[x+1+h+n]
+  AIxhn <- ((Rxh-Rxhn)-n*Mxhn)/Dx
+  
+  #Seguro de Vida de Capitales Múltiples Decrecientes a razón del Capital Final
+  Sxh2<-tabla$`S(x)`[x+1+h+1]
+  Sxhn2<-tabla$`S(x)`[x+1+h+n]
+  Nxhn2<-tabla$`N(x)`[x+1+h+n]
+  aIxhn2<-((Sxh2-Sxhn2)-(n-1)*Nxhn2)/Dx
+  aDxhn<-n*axhn-aIxhn2
+  
+  #Seguro pagadero en caso de Muerte Decreciente a razón del Capital Final
+  Rxh_2<-tabla$`R(x)`[x+1+h+1]
+  Rxhn_2<-tabla$`R(x)`[x+1+h+n]
+  Mxhn_2<-tabla$`M(x)`[x+1+h+n]
+  AIxhn_2<-((Rxh_2-Rxhn_2)-(n-1)*Mxhn_2)/Dx
+  ADxhn<-n*Axhn-AIxhn_2
+  
+  #Seguro de vida con capitales variables en progresión aritmética de razón distinta al capital inicial o final.
+  #av(x;h;n;r)=a(x;h;n)+r .aI(x;h+1;n-1)
+  Sxh1<-tabla$`S(x)`[x+1+h+1]
+  aIxhn1<-((Sxh1-Sxhn)-(n-1)*Nxhn)/Dx
+  avxhnr <-  axhn+r*aIxhn1
+  
+  #Seguro de muerte con capitales variables en progresión aritmética de razón distinta al capital inicial o final.
+  #Av(x;h;n;r)=A(x;h;n)+r .AI(x;h+1;n-1)
+  #AI(x;h+1;n-1)=(R(x+h+1)-R(x+h+n)-(n-1)*M(x+h+n))/D(x)
+  Rxh1 <- tabla$`R(x)`[x+1+h+1]
+  AIxhn1 <- ((Rxh1-Rxhn)-(n-1)*Mxhn)/Dx
+  Avxhnr <-  Axhn+r*AIxhn1
+  
+  Cobertura<-c("E(x;n)","a(x;h;n)","S(x;n;h)","A(x;h;n)","Dotal", "Dotalina", 
+               "Término Fijo","aI(x;h;n)","AI(x;h;n)","aD(x;h;n)","AD(x;h;n)",
+               "av(x;h;n;r)","Av(x;h;n;r)")
+  PPU.<-c(Ex,axhn,Sxhn.,Axhn,Dotal,Dotalina,
+         TF,aIxhn,AIxhn,aDxhn,ADxhn,
+         avxhnr,Avxhnr)
+  PPU<-round(PPU.,6)
+  resultado<-data.frame(cbind(Cobertura,PPU))
+  print(resultado) }
+
+PPU(27,0,10,1,0.04,1)
+PPU(20,5,10,1,0.02,1)
